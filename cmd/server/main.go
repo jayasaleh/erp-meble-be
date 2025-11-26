@@ -1,68 +1,67 @@
 package main
 
 import (
-	"log"
 	"strings"
 
 	"real-erp-mebel/be/internal/config"
 	"real-erp-mebel/be/internal/database"
-	"real-erp-mebel/be/internal/handlers"
 	"real-erp-mebel/be/internal/middleware"
-	"real-erp-mebel/be/internal/models"
+	"real-erp-mebel/be/internal/routes"
+	"real-erp-mebel/be/internal/utils"
 	"real-erp-mebel/be/internal/websocket"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
 	// Load configuration
 	config.LoadConfig()
 
+	// Initialize logger
+	if err := utils.InitLogger(config.AppConfig.GinMode); err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
+	logger := utils.GetLogger()
+	defer logger.Sync()
+
+	logger.Info("Starting application",
+		zap.String("mode", config.AppConfig.GinMode),
+		zap.String("port", config.AppConfig.Port),
+	)
+
 	// Connect to database
 	if err := database.Connect(); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer database.Close()
 
-	// Auto-migrate models (MVP Schema - 15 tables)
-	if err := database.DB.AutoMigrate(
-		// Core
-		&models.User{},
-		// Master Data
-		&models.Product{},
-		&models.ProductImage{},
-		&models.Supplier{},
-		&models.Warehouse{},
-		// Stock Management
-		&models.StockIn{},
-		&models.StockInItem{},
-		&models.StockOut{},
-		&models.StockOutItem{},
-		&models.InventoryStock{},
-		&models.StockMovement{},
-		// Sales
-		&models.Sales{},
-		&models.SalesItem{},
-		// Purchase Order
-		&models.PurchaseOrder{},
-		&models.PurchaseOrderItem{},
-		// Finance
-		&models.SupplierDebt{},
-	); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
-	}
-	log.Println("Database migration completed - MVP Schema (15 tables)")
+	logger.Info("Database connected successfully")
+
+	// Note: Database migration should be run separately using:
+	// - go run cmd/migrate/main.go (normal migration)
+	// - go run cmd/migrate-fresh/main.go (fresh migration)
 
 	// Set Gin mode
 	gin.SetMode(config.AppConfig.GinMode)
 
 	// Initialize router
-	r := gin.Default()
+	r := gin.New()
+
+	// Global middleware
+	r.Use(middleware.ErrorRecovery()) // Recovery from panic
+	r.Use(middleware.RequestLogger()) // Request logging
+
+	// Initialize rate limiter
+	if err := middleware.InitRateLimiter(); err != nil {
+		logger.Warn("Failed to initialize rate limiter, continuing without it", zap.Error(err))
+	} else {
+		r.Use(middleware.RateLimitMiddleware()) // Rate limiting
+	}
 
 	// Setup CORS
 	corsConfig := cors.DefaultConfig()
-	// Split origins by comma
 	origins := strings.Split(config.AppConfig.CORS.AllowOrigins, ",")
 	for i, origin := range origins {
 		origins[i] = strings.TrimSpace(origin)
@@ -78,41 +77,12 @@ func main() {
 	go hub.Run()
 
 	// Setup routes
-	setupRoutes(r, hub)
+	routes.SetupRoutes(r, hub)
 
 	// Start server
 	port := ":" + config.AppConfig.Port
-	log.Printf("Server starting on port %s", port)
+	logger.Info("Server starting", zap.String("port", port))
 	if err := r.Run(port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
-}
-
-func setupRoutes(r *gin.Engine, hub *websocket.Hub) {
-	// Health check
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "ok",
-			"message": "Server is running",
-		})
-	})
-
-	// WebSocket endpoint
-	r.GET("/ws", websocket.HandleWebSocket(hub))
-
-	// API routes
-	api := r.Group("/api/v1")
-	{
-		// Public routes
-		api.POST("/auth/login", handlers.Login)
-		api.POST("/auth/register", handlers.Register)
-
-		// Protected routes (require authentication)
-		protected := api.Group("")
-		protected.Use(middleware.AuthMiddleware())
-		{
-			// Add your protected routes here
-			protected.GET("/users/me", handlers.GetCurrentUser)
-		}
+		logger.Fatal("Failed to start server", zap.Error(err))
 	}
 }
