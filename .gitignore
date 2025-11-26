@@ -7,6 +7,12 @@
 bin/
 dist/
 
+# Go build artifacts (binary tanpa extension)
+main
+server
+migrate
+migrate-fresh
+
 # Test binary
 *.test
 
@@ -36,4 +42,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Documentation (should be in root, not in be/)
+# Ignore all .md files except README.md
+*.md
+!README.md
 
