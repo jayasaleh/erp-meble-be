@@ -25,11 +25,34 @@ func main() {
 	}
 	defer database.Close()
 
-	// Auto-migrate models
-	if err := database.DB.AutoMigrate(&models.User{}); err != nil {
+	// Auto-migrate models (MVP Schema - 15 tables)
+	if err := database.DB.AutoMigrate(
+		// Core
+		&models.User{},
+		// Master Data
+		&models.Product{},
+		&models.ProductImage{},
+		&models.Supplier{},
+		&models.Warehouse{},
+		// Stock Management
+		&models.StockIn{},
+		&models.StockInItem{},
+		&models.StockOut{},
+		&models.StockOutItem{},
+		&models.InventoryStock{},
+		&models.StockMovement{},
+		// Sales
+		&models.Sales{},
+		&models.SalesItem{},
+		// Purchase Order
+		&models.PurchaseOrder{},
+		&models.PurchaseOrderItem{},
+		// Finance
+		&models.SupplierDebt{},
+	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
-	log.Println("Database migration completed")
+	log.Println("Database migration completed - MVP Schema (15 tables)")
 
 	// Set Gin mode
 	gin.SetMode(config.AppConfig.GinMode)

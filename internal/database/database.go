@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"log"
-
 	"real-erp-mebel/be/internal/config"
 
 	"gorm.io/driver/postgres"

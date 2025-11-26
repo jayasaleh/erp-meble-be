@@ -2,125 +2,128 @@
 
 Backend aplikasi ERP Meble menggunakan Go (Golang) dengan dukungan real-time updates melalui WebSocket.
 
-## Framework dan Package yang Digunakan
+## 🚀 Quick Start
 
-### Framework Utama
-- **Gin** (`github.com/gin-gonic/gin`) - Web framework yang ringan dan cepat untuk HTTP server
-- **GORM** (`gorm.io/gorm`) - ORM untuk database operations
-- **PostgreSQL Driver** (`gorm.io/driver/postgres`) - Driver untuk PostgreSQL database
+### 1. Setup Database
 
-### Real-time Communication
-- **Gorilla WebSocket** (`github.com/gorilla/websocket`) - Library untuk WebSocket connections, memungkinkan real-time updates ke semua client yang terhubung
+**Buat database di pgAdmin:**
+```sql
+CREATE DATABASE mebel_db;
+```
 
-### Authentication & Security
-- **JWT** (`github.com/golang-jwt/jwt/v5`) - JSON Web Tokens untuk authentication
-- **Bcrypt** (`golang.org/x/crypto/bcrypt`) - Password hashing
+**Buat file `.env` di folder `be/`:**
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your_postgres_password  # GANTI INI!
+DB_NAME=mebel_db
+DB_SSLMODE=disable
+```
 
-### Validation & Utilities
-- **Validator** (`github.com/go-playground/validator/v10`) - Struct validation
-- **Godotenv** (`github.com/joho/godotenv`) - Environment variables management
-- **CORS** (`github.com/gin-contrib/cors`) - Cross-Origin Resource Sharing middleware
+**Test koneksi:**
+```bash
+go run test_db.go
+```
 
-## Struktur Project
+### 2. Install Dependencies
+
+```bash
+go mod download
+```
+
+### 3. Run Server
+
+```bash
+go run cmd/server/main.go
+```
+
+Server akan berjalan di `http://localhost:8080`
+
+---
+
+## 📋 Setup Database Lengkap
+
+Lihat dokumentasi:
+- **`QUICK_SETUP_DB.md`** - Setup cepat (5 menit)
+- **`SETUP_DATABASE.md`** - Panduan lengkap + troubleshooting
+
+---
+
+## 🏗️ Struktur Project
 
 ```
 be/
-├── cmd/
-│   └── server/
-│       └── main.go          # Entry point aplikasi
+├── cmd/server/main.go      # Entry point
 ├── internal/
-│   ├── config/              # Konfigurasi aplikasi
-│   ├── database/            # Database connection
-│   ├── handlers/            # HTTP handlers
-│   ├── middleware/          # Middleware (auth, etc)
-│   ├── models/              # Database models
-│   └── websocket/           # WebSocket hub dan handlers
-├── pkg/                     # Shared packages
-├── .env.example             # Contoh environment variables
-├── go.mod                   # Go modules
-└── README.md
+│   ├── config/             # Konfigurasi
+│   ├── database/           # Database connection
+│   ├── handlers/           # HTTP handlers
+│   ├── middleware/         # Middleware (auth, dll)
+│   ├── models/             # Database models
+│   └── websocket/          # WebSocket hub
+├── pkg/utils/              # Utilities
+└── test_db.go              # Test koneksi database
 ```
 
-## Setup
+---
 
-1. **Install dependencies:**
-   ```bash
-   go mod download
-   ```
+## 📡 Endpoints
 
-2. **Setup environment variables:**
-   ```bash
-   cp .env.example .env
-   # Edit .env sesuai dengan konfigurasi Anda
-   ```
+### Public
+- `GET /health` - Health check
+- `POST /api/v1/auth/login` - Login
+- `POST /api/v1/auth/register` - Register
 
-3. **Setup database:**
-   - Pastikan PostgreSQL sudah terinstall dan running
-   - Buat database: `CREATE DATABASE erp_meble;`
-   - Update konfigurasi di `.env`
+### Protected (require JWT)
+- `GET /api/v1/users/me` - Get current user
 
-4. **Run migrations (akan ditambahkan nanti):**
-   ```bash
-   # Migrations akan dibuat untuk auto-migrate models
-   ```
+### WebSocket
+- `GET /ws` - WebSocket connection untuk real-time updates
 
-5. **Run server:**
-   ```bash
-   go run cmd/server/main.go
-   ```
+---
 
-## Real-time Updates
+## 🔧 Konfigurasi
 
-Aplikasi menggunakan WebSocket untuk real-time updates. Semua client yang terhubung akan menerima update secara real-time ketika ada perubahan data.
+Semua konfigurasi di file `.env`:
+- Database connection
+- JWT secret
+- CORS settings
+- Server port
 
-### WebSocket Endpoint
-- **URL:** `ws://localhost:8080/ws?user_id=<user_id>`
-- **Usage:** Client dapat connect ke endpoint ini untuk menerima real-time updates
+---
 
-### Broadcasting Updates
-Untuk mengirim update ke semua client yang terhubung:
-```go
-import "real-erp-mebel/be/internal/websocket"
+## 📚 Dokumentasi
 
-// Broadcast message
-hub.BroadcastMessage([]byte(`{"type": "update", "data": {...}}`))
-```
+- **`SETUP_DATABASE.md`** - Setup database lengkap
+- **`QUICK_SETUP_DB.md`** - Setup cepat
+- **`FEATURE_LIST.md`** (di root) - Daftar fitur yang perlu dibuat
+- **`DEVELOPMENT_ROADMAP.md`** (di root) - Roadmap development
 
-## API Endpoints
+---
 
-### Public Endpoints
-- `POST /api/v1/auth/login` - Login user
-- `POST /api/v1/auth/register` - Register user baru
+## 🎯 Next Steps
 
-### Protected Endpoints (require JWT token)
-- `GET /api/v1/users/me` - Get current user info
+Setelah database terhubung:
+1. ✅ Database sudah connect
+2. ✅ Auto-migration sudah jalan
+3. ✅ Siap untuk mulai membuat fitur-fitur ERP
 
-### Health Check
-- `GET /health` - Check server status
+**Mulai dari:** Master Data Barang (lihat FEATURE_LIST.md)
 
-## Development
+---
 
-### Menambahkan Model Baru
-1. Buat file di `internal/models/`
-2. Model akan di-migrate otomatis saat aplikasi start (akan ditambahkan)
+## 🛠️ Tech Stack
 
-### Menambahkan Handler Baru
-1. Buat handler function di `internal/handlers/`
-2. Register route di `cmd/server/main.go`
+- **Go 1.25+** - Programming language
+- **Gin** - Web framework
+- **GORM** - ORM untuk database
+- **PostgreSQL** - Database
+- **Gorilla WebSocket** - Real-time updates
+- **JWT** - Authentication
 
-### Real-time Updates
-Gunakan WebSocket hub untuk broadcast updates:
-```go
-// Di handler atau service Anda
-hub.BroadcastMessage([]byte(jsonData))
-```
+---
 
-## Next Steps
-
-1. Tambahkan auto-migration untuk models
-2. Implementasi CRUD operations untuk entities ERP
-3. Tambahkan real-time notifications untuk events penting
-4. Implementasi role-based access control (RBAC)
-5. Tambahkan logging dan monitoring
-6. Setup testing
+**Selamat coding!** 🚀
 
