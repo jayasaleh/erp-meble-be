@@ -74,8 +74,9 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		User: dto.UserResponse{
 			ID:    user.ID,
 			Email: user.Email,
-			Name:  user.Name,
-			Role:  user.Role,
+			Nama:  user.Nama,
+			Peran: user.Peran,
+			Aktif: user.Aktif,
 		},
 	}, nil
 }
@@ -104,9 +105,9 @@ func (s *authService) Register(req dto.RegisterRequest) (*dto.UserResponse, erro
 	user := &models.User{
 		Email:    req.Email,
 		Password: string(hashedPassword),
-		Name:     req.Name,
-		Role:     "kasir", // Default role
-		IsActive: true,
+		Nama:     req.Name,
+		Peran:    "kasir", // Default role
+		Aktif:    true,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -125,8 +126,9 @@ func (s *authService) Register(req dto.RegisterRequest) (*dto.UserResponse, erro
 	return &dto.UserResponse{
 		ID:    user.ID,
 		Email: user.Email,
-		Name:  user.Name,
-		Role:  user.Role,
+		Nama:  user.Nama,
+		Peran: user.Peran,
+		Aktif: user.Aktif,
 	}, nil
 }
 
@@ -135,7 +137,7 @@ func (s *authService) GenerateToken(user *models.User) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"role":    user.Role,
+		"role":    user.Peran,
 		"exp":     expirationTime.Unix(),
 		"iat":     time.Now().Unix(),
 	}

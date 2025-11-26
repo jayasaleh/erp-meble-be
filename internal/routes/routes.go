@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"real-erp-mebel/be/internal/handlers"
-	"real-erp-mebel/be/internal/middleware"
 	"real-erp-mebel/be/internal/utils"
 	"real-erp-mebel/be/internal/websocket"
 
@@ -10,58 +8,31 @@ import (
 )
 
 // SetupRoutes mengatur semua routes aplikasi
+// Best Practice: Routes dipisahkan per modul untuk maintainability
 func SetupRoutes(r *gin.Engine, hub *websocket.Hub) {
-	// Initialize handlers
-	authHandler := handlers.NewAuthHandler()
-	userHandler := handlers.NewUserHandler()
-
-	// Health check
+	// Health check (public)
 	r.GET("/health", healthCheck)
 
-	// WebSocket endpoint
+	// WebSocket endpoint (public)
 	r.GET("/ws", websocket.HandleWebSocket(hub))
 
 	// API routes
 	api := r.Group("/api/v1")
 	{
 		// Public routes (no authentication required)
-		setupPublicRoutes(api, authHandler)
+		SetupAuthRoutes(api)
 
 		// Protected routes (require authentication)
-		setupProtectedRoutes(api, userHandler)
-	}
-}
+		// Routes dipisahkan per modul untuk kemudahan maintenance
+		SetupUserRoutes(api)
 
-// setupPublicRoutes mengatur public routes
-func setupPublicRoutes(api *gin.RouterGroup, authHandler *handlers.AuthHandler) {
-	auth := api.Group("/auth")
-	{
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/register", authHandler.Register)
-	}
-}
-
-// setupProtectedRoutes mengatur protected routes
-func setupProtectedRoutes(api *gin.RouterGroup, userHandler *handlers.UserHandler) {
-	protected := api.Group("")
-	protected.Use(middleware.AuthMiddleware())
-	{
-		// User routes
-		users := protected.Group("/users")
-		{
-			users.GET("/me", userHandler.GetCurrentUser)
-		}
-
-		// Add more protected routes here
-		// Example:
-		// products := protected.Group("/products")
-		// {
-		// 	products.GET("", productHandler.List)
-		// 	products.POST("", productHandler.Create)
-		// 	products.GET("/:id", productHandler.GetByID)
-		// 	products.PUT("/:id", productHandler.Update)
-		// 	products.DELETE("/:id", productHandler.Delete)
-		// }
+		// Add more module routes here:
+		// SetupProductRoutes(api)
+		// SetupStockRoutes(api)
+		// SetupSalesRoutes(api)
+		// SetupPurchaseOrderRoutes(api)
+		// SetupFinanceRoutes(api)
+		// SetupReportRoutes(api)
 	}
 }
 
@@ -71,4 +42,3 @@ func healthCheck(c *gin.Context) {
 		"status": "ok",
 	})
 }
-

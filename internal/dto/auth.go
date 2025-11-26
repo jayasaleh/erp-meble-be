@@ -19,11 +19,5 @@ type LoginResponse struct {
 	User  UserResponse `json:"user"`
 }
 
-// UserResponse adalah DTO untuk response user
-type UserResponse struct {
-	ID    uint   `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-	Role  string `json:"role"`
-}
+// UserResponse dipindahkan ke dto/user.go untuk konsistensi
 
