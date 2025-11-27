@@ -13,7 +13,31 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "real-erp-mebel/be/docs" // Swagger docs
 )
+
+// @title           ERP Meble API
+// @version         1.0
+// @description     API untuk sistem ERP Meble dengan fitur real-time updates
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.email  support@erpmeble.com
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8000
+// @BasePath  /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description JWT Authorization header using the Bearer scheme. Example: "Bearer {token}" or just "{token}"
 
 func main() {
 	// Load configuration
@@ -49,6 +73,20 @@ func main() {
 	// Initialize router
 	r := gin.New()
 
+	// Setup CORS FIRST (before other middleware)
+	corsConfig := cors.DefaultConfig()
+	origins := strings.Split(config.AppConfig.CORS.AllowOrigins, ",")
+	for i, origin := range origins {
+		origins[i] = strings.TrimSpace(origin)
+	}
+	corsConfig.AllowOrigins = origins
+	corsConfig.AllowMethods = strings.Split(config.AppConfig.CORS.AllowMethods, ",")
+	corsConfig.AllowHeaders = strings.Split(config.AppConfig.CORS.AllowHeaders, ",")
+	corsConfig.AllowCredentials = true
+	corsConfig.ExposeHeaders = []string{"Content-Length", "Content-Type"}
+	corsConfig.AllowWildcard = false
+	r.Use(cors.New(corsConfig))
+
 	// Global middleware
 	r.Use(middleware.ErrorRecovery()) // Recovery from panic
 	r.Use(middleware.RequestLogger()) // Request logging
@@ -60,18 +98,6 @@ func main() {
 		r.Use(middleware.RateLimitMiddleware()) // Rate limiting
 	}
 
-	// Setup CORS
-	corsConfig := cors.DefaultConfig()
-	origins := strings.Split(config.AppConfig.CORS.AllowOrigins, ",")
-	for i, origin := range origins {
-		origins[i] = strings.TrimSpace(origin)
-	}
-	corsConfig.AllowOrigins = origins
-	corsConfig.AllowMethods = strings.Split(config.AppConfig.CORS.AllowMethods, ",")
-	corsConfig.AllowHeaders = strings.Split(config.AppConfig.CORS.AllowHeaders, ",")
-	corsConfig.AllowCredentials = true
-	r.Use(cors.New(corsConfig))
-
 	// Initialize WebSocket hub
 	hub := websocket.NewHub()
 	go hub.Run()
@@ -79,9 +105,13 @@ func main() {
 	// Setup routes
 	routes.SetupRoutes(r, hub)
 
+	// Swagger documentation
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Start server
 	port := ":" + config.AppConfig.Port
 	logger.Info("Server starting", zap.String("port", port))
+	logger.Info("Swagger documentation available at", zap.String("url", "http://localhost"+port+"/swagger/index.html"))
 	if err := r.Run(port); err != nil {
 		logger.Fatal("Failed to start server", zap.Error(err))
 	}

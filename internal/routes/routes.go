@@ -37,6 +37,12 @@ func SetupRoutes(r *gin.Engine, hub *websocket.Hub) {
 }
 
 // healthCheck adalah handler untuk health check endpoint
+// @Summary      Health check
+// @Description  Check status server
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  utils.Response
+// @Router       /health [get]
 func healthCheck(c *gin.Context) {
 	utils.OK(c, "Server is running", gin.H{
 		"status": "ok",

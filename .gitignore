@@ -48,3 +48,9 @@ Thumbs.db
 *.md
 !README.md
 
+# Helper scripts (temporary, tidak perlu di-push)
+*.sh
+fix-port.sh
+kill-port-8000.sh
+kill-docker-port-8000.sh
+

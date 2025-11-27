@@ -33,7 +33,7 @@ func NewUserHandler() *UserHandler {
 // @Success 200 {object} utils.Response{data=dto.UserResponse}
 // @Failure 401 {object} utils.Response
 // @Failure 404 {object} utils.Response
-// @Router /api/v1/users/me [get]
+// @Router /users/me [get]
 func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -71,7 +71,7 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 // @Success 200 {object} utils.Response{data=dto.ListUsersResponse}
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
-// @Router /api/v1/users [get]
+// @Router /users [get]
 func (h *UserHandler) ListUsers(c *gin.Context) {
 	var req dto.ListUsersRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -105,7 +105,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
 // @Failure 404 {object} utils.Response
-// @Router /api/v1/users/{id} [get]
+// @Router /users/{id} [get]
 func (h *UserHandler) GetUserByID(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -142,7 +142,7 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
 // @Failure 403 {object} utils.Response
-// @Router /api/v1/users [post]
+// @Router /users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	// Check permission (only owner and admin can create users)
 	if !h.hasPermission(c, []string{"owner", "admin_gudang"}) {
@@ -179,7 +179,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Failure 401 {object} utils.Response
 // @Failure 403 {object} utils.Response
 // @Failure 404 {object} utils.Response
-// @Router /api/v1/users/{id} [put]
+// @Router /users/{id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -191,7 +191,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	userIDValue, _ := c.Get("user_id")
 	userID := h.getUserIDFromContext(userIDValue)
 	isOwnerOrAdmin := h.hasPermission(c, []string{"owner", "admin_gudang"})
-	
+
 	if userID != uint(id) && !isOwnerOrAdmin {
 		utils.Forbidden(c, "You don't have permission to update this user")
 		return
@@ -204,17 +204,17 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 			utils.BadRequest(c, "Invalid request body", err)
 			return
 		}
-		
+
 		// Remove fields that regular users can't update
 		req.Peran = nil
 		req.Aktif = nil
-		
+
 		user, err := h.userService.UpdateUser(uint(id), req)
 		if err != nil {
 			h.handleError(c, err)
 			return
 		}
-		
+
 		utils.OK(c, "User updated successfully", user)
 		return
 	}
@@ -246,7 +246,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Failure 401 {object} utils.Response
 // @Failure 403 {object} utils.Response
 // @Failure 404 {object} utils.Response
-// @Router /api/v1/users/{id} [delete]
+// @Router /users/{id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	// Check permission (only owner and admin can delete users)
 	if !h.hasPermission(c, []string{"owner", "admin_gudang"}) {
@@ -279,7 +279,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 // @Success 200 {object} utils.Response
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
-// @Router /api/v1/users/me/password [put]
+// @Router /users/me/password [put]
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	userIDValue, _ := c.Get("user_id")
 	userID := h.getUserIDFromContext(userIDValue)
@@ -290,7 +290,8 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 
 	var req dto.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, "Invalid request body", err)
+		// Jangan kirim error detail yang mungkin berisi password
+		utils.BadRequest(c, "Invalid request body", nil)
 		return
 	}
 

@@ -59,7 +59,7 @@ func LoadConfig() {
 			Expiration: getEnv("JWT_EXPIRATION", "24h"),
 		},
 		CORS: CORSConfig{
-			AllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "http://localhost:5173,http://localhost:3000"),
+			AllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "http://localhost:8000,http://localhost:8080,http://localhost:5173,http://localhost:3000"),
 			AllowMethods: getEnv("CORS_ALLOW_METHODS", "GET,POST,PUT,DELETE,PATCH,OPTIONS"),
 			AllowHeaders: getEnv("CORS_ALLOW_HEADERS", "Origin,Content-Type,Accept,Authorization"),
 		},
