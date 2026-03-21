@@ -13,6 +13,7 @@ type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
 	Password string `json:"password" binding:"required,min=6" example:"password123"`
 	Name     string `json:"name" binding:"required" example:"John Doe"`
+	Role     string `json:"role" example:"admin"` // optional, default: kasir
 }
 
 // LoginResponse adalah DTO untuk response login

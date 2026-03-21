@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"real-erp-mebel/be/internal/database"
 	"real-erp-mebel/be/internal/utils"
 	"real-erp-mebel/be/internal/websocket"
 
@@ -27,12 +28,15 @@ func SetupRoutes(r *gin.Engine, hub *websocket.Hub) {
 		SetupUserRoutes(api)
 
 		// Add more module routes here:
-		// SetupProductRoutes(api)
-		// SetupStockRoutes(api)
-		// SetupSalesRoutes(api)
+		SetupProductRoutes(api)
+		SetupStockRoutes(api, database.DB)  // Registered Stock Routes
+		SetupPemasokRoutes(api)             // Registered Supplier Routes
+		SetupGudangRoutes(api)              // Registered Warehouse Routes
+		SetupSalesRoutes(api, database.DB)  // Registered Sales Routes (Mode 1: POS)
+		SetupReturnRoutes(api, database.DB) // Registered Return Routes (Sales Return + Purchase Return)
+		SetupReportRoutes(api)              // Registered Report Routes (Sales by Period/Product/Customer)
 		// SetupPurchaseOrderRoutes(api)
 		// SetupFinanceRoutes(api)
-		// SetupReportRoutes(api)
 	}
 }
 

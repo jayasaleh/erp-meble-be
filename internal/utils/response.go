@@ -11,7 +11,15 @@ type Response struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
+	Meta    *Meta       `json:"meta,omitempty"`
 	Error   interface{} `json:"error,omitempty"`
+}
+
+type Meta struct {
+	Page      int `json:"page"`
+	Limit     int `json:"limit"`
+	Total     int `json:"total"`
+	TotalPage int `json:"total_page"`
 }
 
 // SuccessResponse mengembalikan response sukses
@@ -20,6 +28,16 @@ func SuccessResponse(c *gin.Context, statusCode int, message string, data interf
 		Success: true,
 		Message: message,
 		Data:    data,
+	})
+}
+
+// SuccessResponseWithMeta mengembalikan response sukses dengan metadata pagination
+func SuccessResponseWithMeta(c *gin.Context, statusCode int, message string, data interface{}, meta Meta) {
+	c.JSON(statusCode, Response{
+		Success: true,
+		Message: message,
+		Data:    data,
+		Meta:    &meta,
 	})
 }
 
@@ -72,3 +90,7 @@ func OK(c *gin.Context, message string, data interface{}) {
 	SuccessResponse(c, http.StatusOK, message, data)
 }
 
+// OKWithMeta mengembalikan 200 OK dengan metadata
+func OKWithMeta(c *gin.Context, message string, data interface{}, meta Meta) {
+	SuccessResponseWithMeta(c, http.StatusOK, message, data, meta)
+}

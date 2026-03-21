@@ -134,6 +134,8 @@ type PergerakanStok struct {
 	Produk         Produk    `gorm:"foreignKey:IDProduk" json:"produk,omitempty"`
 	IDGudang       uint      `gorm:"index;not null;column:id_gudang" json:"id_gudang"`
 	Gudang         Gudang    `gorm:"foreignKey:IDGudang" json:"gudang,omitempty"`
+	IDBatch        *uint     `gorm:"index;column:id_batch" json:"id_batch"` // Link ke batch spesifik (FIFO)
+	Batch          *StokBatch `gorm:"foreignKey:IDBatch" json:"batch,omitempty"`
 	TipePergerakan string    `gorm:"type:varchar(20);not null;column:tipe_pergerakan" json:"tipe_pergerakan"` // in, out, transfer_in, transfer_out, adjustment
 	TipeReferensi  string    `gorm:"type:varchar(50);not null;column:tipe_referensi" json:"tipe_referensi"`   // stock_in, stock_out, sales, transfer, opname
 	IDReferensi    *uint     `gorm:"index;column:id_referensi" json:"id_referensi"`

@@ -58,10 +58,12 @@ func main() {
 		&models.BarangKeluar{},
 		&models.ItemBarangKeluar{},
 		&models.StokInventori{},
+		&models.StokBatch{}, // FIFO Batch Tracking
 		&models.PergerakanStok{},
-		// Sales
+		// Sales (Mode 1: POS)
 		&models.Penjualan{},
 		&models.ItemPenjualan{},
+		&models.ItemPenjualanBatch{}, // FIFO Batch Breakdown per Item Penjualan
 		// Purchase Order
 		&models.PesananPembelian{},
 		&models.ItemPesananPembelian{},

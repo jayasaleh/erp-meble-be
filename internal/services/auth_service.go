@@ -101,12 +101,17 @@ func (s *authService) Register(req dto.RegisterRequest) (*dto.UserResponse, erro
 		return nil, utils.NewAppError(utils.ErrCodeInternalError, "Failed to hash password", err)
 	}
 
+	role := "kasir"
+	if req.Role != "" {
+		role = req.Role
+	}
+
 	// Create user
 	user := &models.User{
 		Email:    req.Email,
 		Password: string(hashedPassword),
 		Nama:     req.Name,
-		Peran:    "kasir", // Default role
+		Peran:    role,
 		Aktif:    true,
 	}
 
@@ -150,4 +155,3 @@ func (s *authService) GenerateToken(user *models.User) (string, error) {
 
 	return tokenString, nil
 }
-

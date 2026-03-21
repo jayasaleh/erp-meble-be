@@ -25,7 +25,7 @@ import (
 // @description     API untuk sistem ERP Meble dengan fitur real-time updates
 // @termsOfService  http://swagger.io/terms/
 
-// @contact.name   API Support
+// @contact.name   API Suppornt
 // @contact.email  support@erpmeble.com
 
 // @license.name  Apache 2.0
