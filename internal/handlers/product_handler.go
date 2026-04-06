@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"real-erp-mebel/be/internal/dto"
 	"real-erp-mebel/be/internal/services"
 	"real-erp-mebel/be/internal/utils"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -174,6 +178,98 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	}
 
 	utils.OK(c, "Produk berhasil dihapus", nil)
+}
+
+// UploadProductImages godoc
+// @Summary      Upload multiple product images
+// @Description  Upload multiple images for a product replacing existing images
+// @Tags         products
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        id       path      int  true  "Product ID"
+// @Param        images   formData  file true  "Multiple image files"
+// @Success      200      {object}  utils.Response
+// @Failure      400      {object}  utils.Response
+// @Failure      500      {object}  utils.Response
+// @Security     BearerAuth
+// @Router       /api/v1/products/{id}/images [post]
+func (h *ProductHandler) UploadProductImages(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		utils.BadRequest(c, "Invalid product ID", nil)
+		return
+	}
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		utils.BadRequest(c, "Gagal memproses form data", err)
+		return
+	}
+
+	files := form.File["images"]
+	if len(files) == 0 {
+		utils.BadRequest(c, "Tidak ada file gambar yang diupload", nil)
+		return
+	}
+
+	uploadDir := "uploads/products"
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		utils.InternalServerError(c, "Gagal membuat direktori upload", err)
+		return
+	}
+
+	var imagePaths []string
+	for _, fileHeader := range files {
+		fileName := fmt.Sprintf("%d_%d_%s", id, time.Now().UnixNano(), fileHeader.Filename)
+		filePath := filepath.Join(uploadDir, fileName)
+
+		if err := c.SaveUploadedFile(fileHeader, filePath); err != nil {
+			utils.InternalServerError(c, "Gagal menyimpan file gambar", err)
+			return
+		}
+		relativeURL := "/uploads/products/" + fileName
+		imagePaths = append(imagePaths, relativeURL)
+	}
+
+	if err := h.productService.SaveProductImages(uint(id), imagePaths); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.OK(c, "Gambar produk berhasil disimpan", gin.H{"paths": imagePaths})
+}
+
+// DeleteProductImage godoc
+// @Summary      Delete a single product image
+// @Description  Delete a specific image from a product
+// @Tags         products
+// @Produce      json
+// @Param        id       path      int  true  "Product ID"
+// @Param        imageId  path      int  true  "Image ID"
+// @Success      200      {object}  utils.Response
+// @Failure      400      {object}  utils.Response
+// @Failure      500      {object}  utils.Response
+// @Security     BearerAuth
+// @Router       /api/v1/products/{id}/images/{imageId} [delete]
+func (h *ProductHandler) DeleteProductImage(c *gin.Context) {
+	productID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		utils.BadRequest(c, "Invalid product ID", nil)
+		return
+	}
+
+	imageID, err := strconv.ParseUint(c.Param("imageId"), 10, 32)
+	if err != nil {
+		utils.BadRequest(c, "Invalid image ID", nil)
+		return
+	}
+
+	if err := h.productService.DeleteProductImage(uint(productID), uint(imageID)); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.OK(c, "Gambar produk berhasil dihapus", nil)
 }
 
 // Helper function to handle errors

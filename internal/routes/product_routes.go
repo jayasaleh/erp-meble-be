@@ -27,5 +27,7 @@ func SetupProductRoutes(api *gin.RouterGroup) {
 		products.GET("/:id", productHandler.GetProduct)
 		products.PUT("/:id", productHandler.UpdateProduct)
 		products.DELETE("/:id", productHandler.DeleteProduct)
+		products.POST("/:id/images", productHandler.UploadProductImages)
+		products.DELETE("/:id/images/:imageId", productHandler.DeleteProductImage)
 	}
 }

@@ -21,11 +21,40 @@ type StockMovementResponse struct {
 	Type          string    `json:"type"`     // in, out, adjustment, dll
 	ReferenceType string    `json:"ref_type"` // sales, po, manual, dll
 	ReferenceID   *uint     `json:"ref_id"`
+	ProductID     uint      `json:"product_id"`
+	ProductName   string    `json:"product_name"`
 	Quantity      int       `json:"quantity"`      // + / -
-	BalanceAfter  int       `json:"balance_after"` // Running balance
+	SystemStock   int       `json:"system_stock"`  // BalanceBefore (System stock during opname)
+	BalanceAfter  int       `json:"balance_after"` // Running balance (Actual physical stock after opname)
+	CostPrice     float64   `json:"cost_price"`    // Cost price per piece to evaluate loss/surplus
+	WarehouseID   uint      `json:"warehouse_id"`
 	WarehouseName string    `json:"warehouse_name"`
 	OperatorName  string    `json:"operator_name"`
 	Notes         string    `json:"notes"`
+	BatchID       *uint     `json:"batch_id"`
+}
+
+// BatchResponse adalah response untuk detail batch FIFO
+type BatchResponse struct {
+	ID            uint       `json:"id"`
+	ProductID     uint       `json:"product_id"`
+	ProductName   string     `json:"product_name"`
+	ProductSKU    string     `json:"product_sku"`
+	WarehouseID   uint       `json:"warehouse_id"`
+	WarehouseName string     `json:"warehouse_name"`
+	EntryDate     time.Time  `json:"entry_date"`
+	ExpiryDate    *time.Time `json:"expiry_date"`
+	InitialQty    int        `json:"initial_qty"`
+	CurrentQty    int        `json:"current_qty"`
+	CostPrice     float64    `json:"cost_price"`
+	ReferenceType string     `json:"reference_type"`
+	ReferenceID   *uint      `json:"reference_id"`
+	Notes         string     `json:"notes"`
+	IsActive      bool       `json:"is_active"`
+	LastOpnameAt  *time.Time `json:"last_opname_at"`
+	LastOpnameQty *int       `json:"last_opname_qty"`
+	OperatorName  string     `json:"operator_name"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // CreateStockInRequest adalah request untuk barang masuk manual
@@ -69,5 +98,6 @@ type StockRequestItem struct {
 
 type StockOpnameItem struct {
 	ProductID   uint `json:"product_id" binding:"required"`
+	BatchID     uint `json:"batch_id"`
 	ActualStock int  `json:"actual_stock" binding:"required,min=0"`
 }

@@ -15,6 +15,7 @@ type ReportService interface {
 	GetSalesReportByProduct(req *dto.SalesReportRequest) (*dto.SalesReportByProductResponse, error)
 	GetSalesReportByCustomer(req *dto.SalesReportRequest) (*dto.SalesReportByCustomerResponse, error)
 	GetReturnReport(req *dto.ReturnReportRequest) (*dto.ReturnReportResponse, error)
+	GetStockReport(req *dto.StockReportRequest) (*dto.StockReportResponse, error)
 }
 
 type reportService struct {
@@ -428,5 +429,93 @@ func (s *reportService) GetReturnReport(req *dto.ReturnReportRequest) (*dto.Retu
 		ReturPembelian: resBeli,
 		StokKarantina:  stokKarantina,
 		DampakTotal:    dampak,
+	}, nil
+}
+
+// GetStockReport mengembalikan laporan stok (keseluruhan maupun peringatan stok menipis) lengkap dengan pagination
+func (s *reportService) GetStockReport(req *dto.StockReportRequest) (*dto.StockReportResponse, error) {
+	threshold := req.Threshold
+	if threshold <= 0 {
+		threshold = 5
+	}
+
+	// Query dasar dari tabel produk join stok_batch untuk agregasi
+	buildBase := func() *gorm.DB {
+		q := s.db.Table("produk p").
+			Select("p.id as id_produk, p.sku, p.nama as nama_produk, p.kategori, " +
+				"COALESCE(SUM(b.jumlah_saat_ini), 0) as total_stok, " +
+				"COALESCE(SUM(b.jumlah_saat_ini * b.harga_modal), 0) as valuasi_modal").
+			Joins("LEFT JOIN stok_batch b ON p.id = b.id_produk AND b.aktif = true").
+			Where("p.dihapus_pada IS NULL").
+			Group("p.id, p.sku, p.nama, p.kategori")
+
+		if req.Search != "" {
+			searchLike := "%" + req.Search + "%"
+			q = q.Where("p.nama ILIKE ? OR p.sku ILIKE ?", searchLike, searchLike)
+		}
+
+		if req.IDProduk != nil {
+			q = q.Where("p.id = ?", *req.IDProduk)
+		}
+
+		if req.LowStockOnly {
+			q = q.Having("COALESCE(SUM(b.jumlah_saat_ini), 0) <= ?", threshold)
+		}
+
+		return q
+	}
+
+	// Count total rows using a raw count over the subquery
+	var count int64
+	var totalValuasi float64
+
+	type countRow struct {
+		Total int64
+	}
+	var countResults []dto.StockReportItem
+	if err := buildBase().Scan(&countResults).Error; err != nil {
+		return nil, err
+	}
+	count = int64(len(countResults))
+	for _, r := range countResults {
+		totalValuasi += r.ValuasiModal
+	}
+
+	// Kalkulasi Pagination
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Limit < 1 {
+		req.Limit = 10
+	}
+
+	offset := (req.Page - 1) * req.Limit
+	totalPage := int(math.Ceil(float64(count) / float64(req.Limit)))
+
+	// Tentukan Order & paginate
+	baseQ := buildBase()
+	if req.LowStockOnly {
+		baseQ = baseQ.Order("total_stok ASC") // Menipis paling atas
+	} else {
+		baseQ = baseQ.Order("p.nama ASC")
+	}
+
+	var rows []dto.StockReportItem
+	if err := baseQ.Offset(offset).Limit(req.Limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// Pembulatan desimal valuasi agar rapi
+	for i := range rows {
+		rows[i].ValuasiModal = math.Round(rows[i].ValuasiModal*100) / 100
+	}
+
+	return &dto.StockReportResponse{
+		TotalData:    count,
+		TotalPage:    totalPage,
+		Page:         req.Page,
+		Limit:        req.Limit,
+		TotalValuasi: math.Round(totalValuasi*100) / 100,
+		Data:         rows,
 	}, nil
 }

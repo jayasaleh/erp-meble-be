@@ -2,6 +2,7 @@ package routes
 
 import (
 	"real-erp-mebel/be/internal/handlers"
+	"real-erp-mebel/be/internal/middleware"
 	"real-erp-mebel/be/internal/repositories"
 	"real-erp-mebel/be/internal/services"
 
@@ -16,9 +17,11 @@ func SetupStockRoutes(r *gin.RouterGroup, db *gorm.DB) {
 	stockHandler := handlers.NewStockHandler(stockService)
 
 	stocks := r.Group("/stocks")
+	stocks.Use(middleware.AuthMiddleware())
 	{
 		stocks.GET("", stockHandler.GetStocks)
 		stocks.GET("/history", stockHandler.GetStockHistory)
+		stocks.GET("/batches", stockHandler.GetStockBatches)
 		stocks.POST("/in", stockHandler.CreateStockIn)
 		stocks.POST("/out", stockHandler.CreateStockOut)
 		stocks.POST("/adjustment", stockHandler.CreateStockOpname)

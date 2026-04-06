@@ -17,6 +17,8 @@ type ProductService interface {
 	ListProducts(req *dto.ProductListRequest) (*dto.ProductListResponse, error)
 	UpdateProduct(id uint, req *dto.UpdateProductRequest, userID uint) (*dto.ProductResponse, error)
 	DeleteProduct(id uint) error
+	SaveProductImages(productID uint, imagePaths []string) error
+	DeleteProductImage(productID uint, imageID uint) error
 }
 
 type productService struct {
@@ -277,6 +279,47 @@ func (s *productService) DeleteProduct(id uint) error {
 	}
 
 	return s.productRepo.Delete(product.ID)
+}
+
+// SaveProductImages menyimpan gambar produk ke database secara append
+func (s *productService) SaveProductImages(productID uint, imagePaths []string) error {
+	product, err := s.productRepo.FindByID(productID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("produk tidak ditemukan")
+		}
+		return err
+	}
+
+	existingCount, _ := s.productRepo.GetImageCount(product.ID)
+
+	var images []models.GambarProduk
+	now := time.Now()
+	for i, path := range imagePaths {
+		isGambarUtama := existingCount == 0 && i == 0 // Gambar pertama jadi utama HANYA jika belum ada gambar
+		images = append(images, models.GambarProduk{
+			IDProduk:       product.ID,
+			PathGambar:     path,
+			GambarUtama:    isGambarUtama,
+			Urutan:         int(existingCount) + i,
+			DibuatPada:     now,
+			DiperbaruiPada: now,
+		})
+	}
+
+	return s.productRepo.SaveProductImages(product.ID, images)
+}
+
+// DeleteProductImage menghapus satu gambar produk
+func (s *productService) DeleteProductImage(productID uint, imageID uint) error {
+	product, err := s.productRepo.FindByID(productID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("produk tidak ditemukan")
+		}
+		return err
+	}
+	return s.productRepo.DeleteProductImage(product.ID, imageID)
 }
 
 // Helper: Convert model to response DTO

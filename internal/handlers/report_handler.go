@@ -105,3 +105,29 @@ func (h *ReportHandler) GetReturnReport(c *gin.Context) {
 	}
 	utils.OK(c, "Laporan rekapitulasi retur", result)
 }
+
+// GetStockReport godoc
+// @Summary      Laporan valuasi aset stok dan peringatan stok menipis
+// @Description  Mengembalikan daftar produk dengan sisa stok dan valuasi modalnya (mendukung filter low_stock_only)
+// @Tags         reports
+// @Produce      json
+// @Param        page            query  int     false "Page (default 1)"
+// @Param        limit           query  int     false "Limit (default 10)"
+// @Param        search          query  string  false "Cari nama/sku"
+// @Param        id_produk       query  uint    false "Filter produk"
+// @Param        low_stock_only  query  bool    false "Hanya tampilkan produk mau habis"
+// @Param        threshold       query  int     false "Batas stok mau habis (default 5)"
+// @Router       /reports/stocks [get]
+func (h *ReportHandler) GetStockReport(c *gin.Context) {
+	var req dto.StockReportRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		utils.BadRequest(c, "Parameter query tidak valid", err.Error())
+		return
+	}
+	result, err := h.service.GetStockReport(&req)
+	if err != nil {
+		utils.InternalServerError(c, "Gagal menghasilkan laporan stok", err.Error())
+		return
+	}
+	utils.OK(c, "Laporan stok berhasil diambil", result)
+}

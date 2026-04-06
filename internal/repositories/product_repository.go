@@ -16,6 +16,9 @@ type ProductRepository interface {
 	Update(product *models.Produk) error
 	Delete(id uint) error
 	GetStockByProductID(productID uint) (int, error)
+	GetImageCount(productID uint) (int64, error)
+	SaveProductImages(productID uint, images []models.GambarProduk) error
+	DeleteProductImage(productID uint, imageID uint) error
 }
 
 type productRepository struct {
@@ -146,4 +149,25 @@ func (r *productRepository) GetStockByProductID(productID uint) (int, error) {
 		Scan(&totalStock).Error
 
 	return int(totalStock), err
+}
+
+// GetImageCount menghitung jumlah gambar produk saat ini
+func (r *productRepository) GetImageCount(productID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.GambarProduk{}).Where("id_produk = ?", productID).Count(&count).Error
+	return count, err
+}
+
+// SaveProductImages menyimpan gambar produk tanpa menghapus gambar lama secara replace
+func (r *productRepository) SaveProductImages(productID uint, images []models.GambarProduk) error {
+	// Insert gambar baru
+	if len(images) > 0 {
+		return r.db.Create(&images).Error
+	}
+	return nil
+}
+
+// DeleteProductImage menghapus spesifik gambar produk
+func (r *productRepository) DeleteProductImage(productID uint, imageID uint) error {
+	return r.db.Where("id_produk = ? AND id = ?", productID, imageID).Delete(&models.GambarProduk{}).Error
 }

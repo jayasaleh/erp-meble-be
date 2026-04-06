@@ -174,3 +174,37 @@ type MetodeCount struct {
 	Jumlah     int64   `json:"jumlah"`
 	TotalNilai float64 `json:"total_nilai"`
 }
+
+// ===========================
+// STOCK REPORT DTOs
+// ===========================
+
+// StockReportRequest mendefinisikan param query laporan stok
+type StockReportRequest struct {
+	Page         int    `form:"page,default=1" binding:"omitempty,min=1"`
+	Limit        int    `form:"limit,default=10" binding:"omitempty,min=1"`
+	Search       string `form:"search"`             // cari nama atau sku produk
+	IDProduk     *uint  `form:"id_produk"`          // filter spesifik produk
+	LowStockOnly bool   `form:"low_stock_only"`     // jika true, hanya stok <= threshold
+	Threshold    int    `form:"threshold,default=5"` // batas stok mau habis
+}
+
+// StockReportResponse mendefinisikan response laporan stok
+type StockReportResponse struct {
+	TotalData    int64             `json:"total_data"`
+	TotalPage    int               `json:"total_page"`
+	Page         int               `json:"page"`
+	Limit        int               `json:"limit"`
+	TotalValuasi float64           `json:"total_valuasi_aset"` // Nilai aset dari data yang difilter
+	Data         []StockReportItem `json:"data"`
+}
+
+// StockReportItem adalah item stok untuk laporan
+type StockReportItem struct {
+	IDProduk       uint    `json:"id_produk"`
+	SKU            string  `json:"sku"`
+	NamaProduk     string  `json:"nama_produk"`
+	Kategori       string  `json:"kategori"`
+	TotalStok      int     `json:"total_stok"`
+	ValuasiModal   float64 `json:"valuasi_modal"` // Total nilai dari sisa stok batch (Stok * Modal)
+}

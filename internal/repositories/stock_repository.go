@@ -10,8 +10,8 @@ import (
 type StockRepository interface {
 	// Query
 	GetStockByProductAndWarehouse(productID, warehouseID uint) (*models.StokInventori, error)
-	GetStockByWarehouse(warehouseID uint) ([]models.StokInventori, error)
-	GetStockHistory(warehouseID, productID uint, limit, offset int) ([]models.PergerakanStok, int64, error)
+	GetStockByWarehouse(warehouseID uint, limit, offset int) ([]models.StokInventori, int64, error)
+	GetStockHistory(warehouseID, productID uint, refType string, limit, offset int) ([]models.PergerakanStok, int64, error)
 
 	// Transaction
 	BeginTx() *gorm.DB
@@ -48,19 +48,29 @@ func (r *stockRepository) GetStockByProductAndWarehouse(productID, warehouseID u
 	return &stock, nil
 }
 
-func (r *stockRepository) GetStockByWarehouse(warehouseID uint) ([]models.StokInventori, error) {
+func (r *stockRepository) GetStockByWarehouse(warehouseID uint, limit, offset int) ([]models.StokInventori, int64, error) {
 	var stocks []models.StokInventori
-	query := r.db.Preload("Produk").Preload("Gudang")
+	var total int64
+	query := r.db.Model(&models.StokInventori{})
 
 	if warehouseID != 0 {
 		query = query.Where("id_gudang = ?", warehouseID)
 	}
 
-	err := query.Find(&stocks).Error
-	return stocks, err
+	err := query.Count(&total).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	err = query.Preload("Produk").Preload("Gudang").
+		Order("diperbarui_pada DESC").
+		Limit(limit).Offset(offset).
+		Find(&stocks).Error
+
+	return stocks, total, err
 }
 
-func (r *stockRepository) GetStockHistory(warehouseID, productID uint, limit, offset int) ([]models.PergerakanStok, int64, error) {
+func (r *stockRepository) GetStockHistory(warehouseID, productID uint, refType string, limit, offset int) ([]models.PergerakanStok, int64, error) {
 	var movements []models.PergerakanStok
 	var total int64
 
@@ -72,13 +82,16 @@ func (r *stockRepository) GetStockHistory(warehouseID, productID uint, limit, of
 	if productID != 0 {
 		query = query.Where("id_produk = ?", productID)
 	}
+	if refType != "" {
+		query = query.Where("tipe_referensi = ?", refType)
+	}
 
 	err := query.Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
 
-	err = query.Preload("Produk").Preload("Gudang").Preload("Pengguna").
+	err = query.Preload("Produk").Preload("Gudang").Preload("Pengguna").Preload("Batch").
 		Order("dibuat_pada DESC").
 		Limit(limit).Offset(offset).
 		Find(&movements).Error

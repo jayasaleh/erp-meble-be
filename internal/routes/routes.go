@@ -17,6 +17,9 @@ func SetupRoutes(r *gin.Engine, hub *websocket.Hub) {
 	// WebSocket endpoint (public)
 	r.GET("/ws", websocket.HandleWebSocket(hub))
 
+	// Serve Static Files for Uploads
+	r.Static("/uploads", "./uploads")
+
 	// API routes
 	api := r.Group("/api/v1")
 	{

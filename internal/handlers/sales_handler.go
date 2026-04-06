@@ -25,15 +25,18 @@ func NewSalesHandler(service services.SalesService) *SalesHandler {
 
 // CreateSale godoc
 // @Summary      Buat transaksi penjualan baru (POS)
-// @Description  Membuat transaksi penjualan dengan FIFO auto-deduct stok. Mendukung multipart/form-data
+// @Description  Membuat transaksi penjualan dengan FIFO auto-deduct stok.
 //
-//	untuk upload bukti transfer. Kirim JSON sebagai field "data", file sebagai "bukti_bayar".
+//	Mendukung dua mode request:
+//	1. application/json  — body JSON langsung (tanpa upload file)
+//	2. multipart/form-data — JSON di field "data", file opsional di "bukti_bayar"
 //
 // @Tags         sales
-// @Accept       multipart/form-data
+// @Accept       json,multipart/form-data
 // @Produce      json
-// @Param        data        formData  string  true   "JSON body CreateSalesRequest"
-// @Param        bukti_bayar formData  file    false  "Foto bukti transfer (opsional)"
+// @Param        body        body      dto.CreateSalesRequest  false  "JSON body (Content-Type: application/json)"
+// @Param        data        formData  string                  false  "JSON body (Content-Type: multipart/form-data)"
+// @Param        bukti_bayar formData  file                    false  "Foto bukti transfer (opsional, hanya multipart)"
 // @Success      201  {object}  utils.Response{data=dto.SalesDetailResponse}
 // @Router       /sales [post]
 func (h *SalesHandler) CreateSale(c *gin.Context) {
@@ -43,20 +46,59 @@ func (h *SalesHandler) CreateSale(c *gin.Context) {
 		return
 	}
 
-	// Parse JSON dari form field "data"
-	dataStr := c.PostForm("data")
-	if dataStr == "" {
-		utils.BadRequest(c, "Field 'data' (JSON) wajib diisi", nil)
-		return
-	}
-
 	var req dto.CreateSalesRequest
-	if err := json.Unmarshal([]byte(dataStr), &req); err != nil {
-		utils.BadRequest(c, "Format JSON tidak valid", err.Error())
-		return
+	var buktiBayarPath *string
+
+	contentType := c.GetHeader("Content-Type")
+
+	if strings.HasPrefix(contentType, "application/json") {
+		// ── Mode 1: JSON body biasa ──────────────────────────────────────────
+		if err := c.ShouldBindJSON(&req); err != nil {
+			utils.BadRequest(c, "Format JSON tidak valid: "+err.Error(), nil)
+			return
+		}
+	} else {
+		// ── Mode 2: multipart/form-data (untuk upload bukti bayar) ───────────
+		dataStr := c.PostForm("data")
+		if dataStr == "" {
+			utils.BadRequest(c, "Field 'data' (JSON) wajib diisi untuk request multipart", nil)
+			return
+		}
+		if err := json.Unmarshal([]byte(dataStr), &req); err != nil {
+			utils.BadRequest(c, "Format JSON tidak valid", err.Error())
+			return
+		}
+
+		// Proses upload bukti bayar (opsional)
+		file, fileHeader, fileErr := c.Request.FormFile("bukti_bayar")
+		if fileErr == nil && file != nil {
+			defer file.Close()
+
+			ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+			allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".pdf": true}
+			if !allowedExts[ext] {
+				utils.BadRequest(c, "Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF", nil)
+				return
+			}
+
+			uploadDir := "uploads/bukti_bayar"
+			if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+				utils.InternalServerError(c, "Gagal membuat direktori upload", err.Error())
+				return
+			}
+
+			fileName := fmt.Sprintf("bukti_%d%s", time.Now().UnixNano(), ext)
+			filePath := filepath.Join(uploadDir, fileName)
+
+			if err := c.SaveUploadedFile(fileHeader, filePath); err != nil {
+				utils.InternalServerError(c, "Gagal menyimpan file", err.Error())
+				return
+			}
+			buktiBayarPath = &filePath
+		}
 	}
 
-	// Validasi manual binding (karena pakai json.Unmarshal bukan ShouldBindJSON)
+	// ── Validasi umum ────────────────────────────────────────────────────────
 	if req.IDGudang == 0 {
 		utils.BadRequest(c, "id_gudang wajib diisi", nil)
 		return
@@ -74,46 +116,14 @@ func (h *SalesHandler) CreateSale(c *gin.Context) {
 		return
 	}
 
-	// Proses upload bukti bayar (opsional, hanya untuk transfer)
-	var buktiBayarPath *string
-	file, fileHeader, fileErr := c.Request.FormFile("bukti_bayar")
-	if fileErr == nil && file != nil {
-		defer file.Close()
-
-		// Validasi ekstensi file
-		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-		allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".pdf": true}
-		if !allowedExts[ext] {
-			utils.BadRequest(c, "Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF", nil)
-			return
-		}
-
-		// Buat direktori jika belum ada
-		uploadDir := "uploads/bukti_bayar"
-		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-			utils.InternalServerError(c, "Gagal membuat direktori upload", err.Error())
-			return
-		}
-
-		// Nama file unik: bukti_<timestamp>_<ext>
-		fileName := fmt.Sprintf("bukti_%d%s", time.Now().UnixNano(), ext)
-		filePath := filepath.Join(uploadDir, fileName)
-
-		if err := c.SaveUploadedFile(fileHeader, filePath); err != nil {
-			utils.InternalServerError(c, "Gagal menyimpan file", err.Error())
-			return
-		}
-		buktiBayarPath = &filePath
-	}
-
-	// Buat transaksi
+	// ── Buat transaksi ───────────────────────────────────────────────────────
 	result, err := h.service.CreateSale(userID, &req)
 	if err != nil {
 		utils.BadRequest(c, err.Error(), nil)
 		return
 	}
 
-	// Update bukti bayar jika ada
+	// Update bukti bayar jika ada (mode multipart)
 	if buktiBayarPath != nil {
 		if err := h.service.UpdateBuktiBayar(result.ID, *buktiBayarPath); err == nil {
 			result.BuktiBayar = buktiBayarPath

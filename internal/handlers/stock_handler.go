@@ -30,13 +30,21 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 	warehouseID, _ := strconv.Atoi(c.Query("warehouse_id"))
 	productID, _ := strconv.Atoi(c.Query("product_id"))
 
-	stocks, err := h.service.GetStocks(uint(warehouseID), uint(productID))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100")) // standard default 100 for stocks as frontend may not support page changing yet
+
+	stocks, total, err := h.service.GetStocks(uint(warehouseID), uint(productID), limit, page)
 	if err != nil {
 		utils.InternalServerError(c, "Failed to fetch stocks", err.Error())
 		return
 	}
 
-	utils.OK(c, "Stocks fetched successfully", stocks)
+	utils.OKWithMeta(c, "Stocks fetched successfully", stocks, utils.Meta{
+		Page:      page,
+		Limit:     limit,
+		Total:     int(total),
+		TotalPage: (int(total) + limit - 1) / limit,
+	})
 }
 
 // GetStockHistory godoc
@@ -46,6 +54,7 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 // @Produce      json
 // @Param        warehouse_id   query   int  false  "Warehouse ID"
 // @Param        product_id     query   int  false  "Product ID"
+// @Param        ref_type       query   string false "Reference Type"
 // @Param        page           query   int  false  "Page number"
 // @Param        limit          query   int  false  "Items per page"
 // @Success      200  {object}  utils.Response{data=[]dto.StockMovementResponse}
@@ -53,10 +62,11 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 func (h *StockHandler) GetStockHistory(c *gin.Context) {
 	warehouseID, _ := strconv.Atoi(c.Query("warehouse_id"))
 	productID, _ := strconv.Atoi(c.Query("product_id"))
+	refType := c.Query("ref_type")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-	history, total, err := h.service.GetStockHistory(uint(warehouseID), uint(productID), limit, page)
+	history, total, err := h.service.GetStockHistory(uint(warehouseID), uint(productID), refType, limit, page)
 	if err != nil {
 		utils.InternalServerError(c, "Failed to fetch history", err.Error())
 		return
@@ -86,7 +96,7 @@ func (h *StockHandler) CreateStockIn(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint("userID") // Assumes Auth Middleware sets this
+	userID := utils.GetUserIDValidity(c)
 	if err := h.service.CreateStockIn(userID, req); err != nil {
 		utils.InternalServerError(c, "Failed to create stock in", err.Error())
 		return
@@ -111,7 +121,7 @@ func (h *StockHandler) CreateStockOut(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint("userID")
+	userID := utils.GetUserIDValidity(c)
 	if err := h.service.CreateStockOut(userID, req); err != nil {
 		utils.InternalServerError(c, "Failed to create stock out", err.Error())
 		return
@@ -136,7 +146,7 @@ func (h *StockHandler) CreateStockOpname(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint("userID")
+	userID := utils.GetUserIDValidity(c)
 	if err := h.service.CreateStockOpname(userID, req); err != nil {
 		utils.InternalServerError(c, "Failed to create stock adjustment", err.Error())
 		return
@@ -161,11 +171,47 @@ func (h *StockHandler) CreateStockTransfer(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint("userID")
+	userID := utils.GetUserIDValidity(c)
 	if err := h.service.CreateStockTransfer(userID, req); err != nil {
 		utils.InternalServerError(c, "Failed to transfer stock", err.Error())
 		return
 	}
 
 	utils.Created(c, "Stock transfer recorded successfully", nil)
+}
+
+// GetStockBatches godoc
+// @Summary      Get FIFO batch detail
+// @Description  Get all batches (active & depleted) for a product in a warehouse
+// @Tags         stocks
+// @Produce      json
+// @Param        product_id    query  int  true   "Product ID"
+// @Param        warehouse_id  query  int  true   "Warehouse ID"
+// @Param        page          query  int  false  "Page number"
+// @Param        limit         query  int  false  "Items per page"
+// @Success      200  {object}  utils.Response{data=[]dto.BatchResponse}
+// @Router       /stocks/batches [get]
+func (h *StockHandler) GetStockBatches(c *gin.Context) {
+	productID, _ := strconv.Atoi(c.Query("product_id"))
+	warehouseID, _ := strconv.Atoi(c.Query("warehouse_id"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+
+	if productID == 0 || warehouseID == 0 {
+		utils.BadRequest(c, "product_id and warehouse_id are required", "")
+		return
+	}
+
+	batches, total, err := h.service.GetStockBatches(uint(productID), uint(warehouseID), limit, page)
+	if err != nil {
+		utils.InternalServerError(c, "Failed to fetch batches", err.Error())
+		return
+	}
+
+	utils.OKWithMeta(c, "Batches fetched successfully", batches, utils.Meta{
+		Page:      page,
+		Limit:     limit,
+		Total:     int(total),
+		TotalPage: (int(total) + limit - 1) / limit,
+	})
 }

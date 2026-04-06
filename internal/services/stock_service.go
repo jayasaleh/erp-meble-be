@@ -6,14 +6,17 @@ import (
 	"real-erp-mebel/be/internal/dto"
 	"real-erp-mebel/be/internal/models"
 	"real-erp-mebel/be/internal/repositories"
+	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
 )
 
 type StockService interface {
-	GetStocks(warehouseID, productID uint) ([]dto.InventoryResponse, error)
-	GetStockHistory(warehouseID, productID uint, limit, page int) ([]dto.StockMovementResponse, int64, error)
+	GetStocks(warehouseID, productID uint, limit, page int) ([]dto.InventoryResponse, int64, error)
+	GetStockHistory(warehouseID, productID uint, refType string, limit, page int) ([]dto.StockMovementResponse, int64, error)
+	GetStockBatches(productID, warehouseID uint, limit, page int) ([]dto.BatchResponse, int64, error)
 
 	CreateStockIn(userID uint, req dto.CreateStockInRequest) error
 	CreateStockOut(userID uint, req dto.CreateStockOutRequest) error
@@ -26,6 +29,27 @@ type stockService struct {
 	batchRepo repositories.StockBatchRepository
 }
 
+func parseOpnameQtyFromNote(note string) (int, bool) {
+	const key = "opname_batch_qty="
+	idx := strings.Index(note, key)
+	if idx == -1 {
+		return 0, false
+	}
+	start := idx + len(key)
+	end := start
+	for end < len(note) && note[end] >= '0' && note[end] <= '9' {
+		end++
+	}
+	if end == start {
+		return 0, false
+	}
+	v, err := strconv.Atoi(note[start:end])
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
 func NewStockService(repo repositories.StockRepository, batchRepo repositories.StockBatchRepository) StockService {
 	return &stockService{
 		repo:      repo,
@@ -33,33 +57,34 @@ func NewStockService(repo repositories.StockRepository, batchRepo repositories.S
 	}
 }
 
-func (s *stockService) GetStocks(warehouseID, productID uint) ([]dto.InventoryResponse, error) {
-	// Logic to fetch and map to DTO
+func (s *stockService) GetStocks(warehouseID, productID uint, limit, page int) ([]dto.InventoryResponse, int64, error) {
+	// Offset calc
+	offset := (page - 1) * limit
 	var stocks []models.StokInventori
+	var total int64
 	var err error
 
 	if productID != 0 && warehouseID != 0 {
 		stock, err := s.repo.GetStockByProductAndWarehouse(productID, warehouseID)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
+			return nil, 0, err
 		}
 		if stock != nil {
 			stocks = append(stocks, *stock)
+			total = 1
 		}
 	} else {
-		stocks, err = s.repo.GetStockByWarehouse(warehouseID)
+		stocks, total, err = s.repo.GetStockByWarehouse(warehouseID, limit, offset)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 
 	var responses []dto.InventoryResponse
 	for _, item := range stocks {
 		responses = append(responses, dto.InventoryResponse{
-			ID:        item.ID,
-			ProductID: item.IDProduk,
-
-			// Note: Preload should populate these
+			ID:           item.ID,
+			ProductID:    item.IDProduk,
 			ProductSKU:   item.Produk.SKU,
 			ProductName:  item.Produk.Nama,
 			WarehouseID:  item.IDGudang,
@@ -68,22 +93,24 @@ func (s *stockService) GetStocks(warehouseID, productID uint) ([]dto.InventoryRe
 			LastUpdate:   item.DiperbaruiPada,
 		})
 	}
-	return responses, nil
+	return responses, total, nil
 }
 
-func (s *stockService) GetStockHistory(warehouseID, productID uint, limit, page int) ([]dto.StockMovementResponse, int64, error) {
+func (s *stockService) GetStockHistory(warehouseID, productID uint, refType string, limit, page int) ([]dto.StockMovementResponse, int64, error) {
 	offset := (page - 1) * limit
-	movements, total, err := s.repo.GetStockHistory(warehouseID, productID, limit, offset)
+	movements, total, err := s.repo.GetStockHistory(warehouseID, productID, refType, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var responses []dto.StockMovementResponse
 	for _, m := range movements {
+		costPrice := 0.0
+		if m.Batch != nil {
+			costPrice = m.Batch.HargaModal
+		}
 
-		var opName string
-		// Basic check if user loaded
-		opName = m.Pengguna.Nama // Assuming User model has Nama
+		systemStock := m.SaldoSetelah - m.Jumlah // If qty -2, bal_after 50, then sys_stock was 52
 
 		responses = append(responses, dto.StockMovementResponse{
 			ID:            m.ID,
@@ -91,21 +118,88 @@ func (s *stockService) GetStockHistory(warehouseID, productID uint, limit, page 
 			Type:          m.TipePergerakan,
 			ReferenceType: m.TipeReferensi,
 			ReferenceID:   m.IDReferensi,
+			ProductID:     m.IDProduk,
+			ProductName:   m.Produk.Nama,
 			Quantity:      m.Jumlah,
+			SystemStock:   systemStock,
 			BalanceAfter:  m.SaldoSetelah,
+			CostPrice:     costPrice,
+			WarehouseID:   m.IDGudang,
 			WarehouseName: m.Gudang.Nama,
-			OperatorName:  opName,
+			OperatorName:  m.Pengguna.Nama,
 			Notes:         m.Keterangan,
+			BatchID:       m.IDBatch,
 		})
 	}
 	return responses, total, nil
 }
 
-func (s *stockService) CreateStockIn(userID uint, req dto.CreateStockInRequest) error {
+func (s *stockService) GetStockBatches(productID, warehouseID uint, limit, page int) ([]dto.BatchResponse, int64, error) {
+	offset := (page - 1) * limit
+	batches, total, err := s.batchRepo.GetAllBatches(productID, warehouseID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	batchIDs := make([]uint, 0, len(batches))
+	for _, b := range batches {
+		batchIDs = append(batchIDs, b.ID)
+	}
+	lastOpnameByBatch, err := s.batchRepo.GetLatestOpnameByBatchIDs(batchIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	creatorsByBatch, err := s.batchRepo.GetCreatorByBatchIDs(batchIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var responses []dto.BatchResponse
+	for _, b := range batches {
+		var lastOpnameAt *time.Time
+		var lastOpnameQty *int
+		if m, ok := lastOpnameByBatch[b.ID]; ok {
+			t := m.DibuatPada
+			q := m.Jumlah
+			if parsedQty, ok := parseOpnameQtyFromNote(m.Keterangan); ok {
+				q = parsedQty
+			}
+			lastOpnameAt = &t
+			lastOpnameQty = &q
+		}
+
+		responses = append(responses, dto.BatchResponse{
+			ID:            b.ID,
+			ProductID:     b.IDProduk,
+			ProductName:   b.Produk.Nama,
+			ProductSKU:    b.Produk.SKU,
+			WarehouseID:   b.IDGudang,
+			WarehouseName: b.Gudang.Nama,
+			EntryDate:     b.TanggalMasuk,
+			ExpiryDate:    b.TanggalKadaluarsa,
+			InitialQty:    b.JumlahAwal,
+			CurrentQty:    b.JumlahSaatIni,
+			CostPrice:     b.HargaModal,
+			ReferenceType: b.TipeReferensi,
+			ReferenceID:   b.IDReferensi,
+			Notes:         b.Keterangan,
+			IsActive:      b.Aktif,
+			LastOpnameAt:  lastOpnameAt,
+			LastOpnameQty: lastOpnameQty,
+			OperatorName:  creatorsByBatch[b.ID],
+			CreatedAt:     b.DibuatPada,
+		})
+	}
+	return responses, total, nil
+}
+
+func (s *stockService) CreateStockIn(userID uint, req dto.CreateStockInRequest) (err error) {
 	tx := s.repo.BeginTx()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			err = fmt.Errorf("panic occurred: %v", r)
 		}
 	}()
 
@@ -187,11 +281,12 @@ func (s *stockService) CreateStockIn(userID uint, req dto.CreateStockInRequest) 
 	return tx.Commit().Error
 }
 
-func (s *stockService) CreateStockOut(userID uint, req dto.CreateStockOutRequest) error {
+func (s *stockService) CreateStockOut(userID uint, req dto.CreateStockOutRequest) (err error) {
 	tx := s.repo.BeginTx()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			err = fmt.Errorf("panic occurred: %v", r)
 		}
 	}()
 
@@ -290,18 +385,12 @@ func (s *stockService) CreateStockOut(userID uint, req dto.CreateStockOutRequest
 	return tx.Commit().Error
 }
 
-func (s *stockService) CreateStockOpname(userID uint, req dto.CreateStockOpnameRequest) error {
-	// Logic:
-	// User sends Actual Stock.
-	// System finds System Stock.
-	// Diff = Actual - System.
-	// If Diff > 0 -> Create Adjustment IN.
-	// If Diff < 0 -> Create Adjustment OUT.
-
+func (s *stockService) CreateStockOpname(userID uint, req dto.CreateStockOpnameRequest) (err error) {
 	tx := s.repo.BeginTx()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			err = fmt.Errorf("panic occurred: %v", r)
 		}
 	}()
 
@@ -310,62 +399,124 @@ func (s *stockService) CreateStockOpname(userID uint, req dto.CreateStockOpnameR
 		now = req.Date
 	}
 
-	// Note: We should probably create a "StockOpname" header table if we want to track the event itself.
-	// Existing schema doesn't seem to have specific Opname header, or maybe I missed it.
-	// checking `stock.go`... no explicit Opname header model.
-	// We will use `BarangMasuk` / `BarangKeluar` (or simpler, just Movement log with type 'adjustment').
-	// The implementation plan says "Log history".
-	// Let's stick to logging movement with TipePergerakan "adjustment".
-
 	for _, item := range req.Items {
-		currentStock, err := s.repo.GetStockByProductAndWarehouse(item.ProductID, req.WarehouseID)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			tx.Rollback()
-			return err
-		}
+		var diff int
+		var systemQty int
 
-		systemQty := 0
-		if currentStock != nil {
-			systemQty = currentStock.Jumlah
-		}
+		if item.BatchID != 0 {
+			var batch models.StokBatch
+			// Load batch with FOR UPDATE
+			if err := tx.Model(&models.StokBatch{}).Where("id = ?", item.BatchID).First(&batch).Error; err != nil {
+				tx.Rollback()
+				return fmt.Errorf("batch not found: %w", err)
+			}
+			systemQty = batch.JumlahSaatIni
+			diff = item.ActualStock - systemQty
 
-		diff := item.ActualStock - systemQty
+			if diff == 0 {
+				continue // No change
+			}
 
-		if diff == 0 {
-			continue // No change
-		}
+			// Update that specific batch
+			batch.JumlahSaatIni = item.ActualStock
+			batch.DiperbaruiPada = now
+			if batch.JumlahSaatIni <= 0 {
+				batch.Aktif = false
+			} else {
+				batch.Aktif = true
+			}
+			if err := tx.Save(&batch).Error; err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to update batch: %w", err)
+			}
 
-		// Update Balance
-		if err := s.repo.UpdateStockBalance(tx, item.ProductID, req.WarehouseID, diff); err != nil {
-			tx.Rollback()
-			return err
-		}
+			// Update Total Inventory Balance
+			if err := s.repo.UpdateStockBalance(tx, item.ProductID, req.WarehouseID, diff); err != nil {
+				tx.Rollback()
+				return err
+			}
 
-		movement := models.PergerakanStok{
-			IDProduk:       item.ProductID,
-			IDGudang:       req.WarehouseID,
-			TipePergerakan: "adjustment",
-			TipeReferensi:  "opname",
-			// IDReferensi:    ?? No header for opname unless generic
-			Jumlah:     diff,
-			IDPengguna: userID,
-			Keterangan: fmt.Sprintf("Opname: System %d -> Actual %d. %s", systemQty, item.ActualStock, req.Notes),
-			DibuatPada: now,
-		}
-		if err := s.repo.CreateStockMovement(tx, &movement); err != nil {
-			tx.Rollback()
-			return err
+			// Record Movement
+			movement := models.PergerakanStok{
+				IDProduk:       item.ProductID,
+				IDGudang:       req.WarehouseID,
+				IDBatch:        &batch.ID,
+				TipePergerakan: "adjustment",
+				TipeReferensi:  "opname",
+				Jumlah:         diff,
+				IDPengguna:     userID,
+				Keterangan:     fmt.Sprintf("Opname Batch #%d: System %d -> Actual %d. %s | opname_batch_qty=%d", batch.ID, systemQty, item.ActualStock, req.Notes, batch.JumlahSaatIni),
+				DibuatPada:     now,
+			}
+			if err := s.repo.CreateStockMovement(tx, &movement); err != nil {
+				tx.Rollback()
+				return err
+			}
+
+		} else {
+			// BatchID = 0 means new surplus physical stock found
+			diff = item.ActualStock
+			if diff <= 0 {
+				continue // Cannot have negative diff without batch
+			}
+
+			var p models.Produk
+			hargaModal := 0.0
+			if err := tx.Select("harga_modal").First(&p, item.ProductID).Error; err == nil {
+				hargaModal = p.HargaModal
+			}
+
+			batch := models.StokBatch{
+				IDProduk:       item.ProductID,
+				IDGudang:       req.WarehouseID,
+				TanggalMasuk:   now,
+				JumlahAwal:     diff,
+				JumlahSaatIni:  diff,
+				HargaModal:     hargaModal,
+				TipeReferensi:  "opname_adjustment_in",
+				Aktif:          true,
+				Keterangan:     req.Notes,
+				DibuatPada:     now,
+				DiperbaruiPada: now,
+			}
+			if err := s.batchRepo.Create(tx, &batch); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to create opname batch: %w", err)
+			}
+
+			// Update Total Inventory Balance
+			if err := s.repo.UpdateStockBalance(tx, item.ProductID, req.WarehouseID, diff); err != nil {
+				tx.Rollback()
+				return err
+			}
+
+			movement := models.PergerakanStok{
+				IDProduk:       item.ProductID,
+				IDGudang:       req.WarehouseID,
+				IDBatch:        &batch.ID,
+				TipePergerakan: "adjustment",
+				TipeReferensi:  "opname",
+				Jumlah:         diff,
+				IDPengguna:     userID,
+				Keterangan:     fmt.Sprintf("Opname (New Surplus Batch): Actual %d. %s | opname_batch_qty=%d", item.ActualStock, req.Notes, batch.JumlahSaatIni),
+				DibuatPada:     now,
+			}
+			if err := s.repo.CreateStockMovement(tx, &movement); err != nil {
+				tx.Rollback()
+				return err
+			}
 		}
 	}
 
 	return tx.Commit().Error
 }
 
-func (s *stockService) CreateStockTransfer(userID uint, req dto.CreateStockTransferRequest) error {
+func (s *stockService) CreateStockTransfer(userID uint, req dto.CreateStockTransferRequest) (err error) {
 	tx := s.repo.BeginTx()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			err = fmt.Errorf("panic occurred: %v", r)
 		}
 	}()
 

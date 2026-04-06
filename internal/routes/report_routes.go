@@ -24,5 +24,8 @@ func SetupReportRoutes(api *gin.RouterGroup) {
 
 		// Returns Report
 		reports.GET("/returns", reportHandler.GetReturnReport) // ?tanggal_dari=&tanggal_sampai=
+
+		// Stocks / Inventory Report
+		reports.GET("/stocks", reportHandler.GetStockReport) // ?page=1&limit=10&search=&low_stock_only=true
 	}
 }
